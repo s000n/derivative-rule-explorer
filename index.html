@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Derivative Rule Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* layout idea: formula list on the left, sticky graph panel on the right; panel becomes a full-screen sheet on phones */
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --ink:#15202b; --muted:#566879; --line:#d8dfe6;
+  --a:#1f6fd1; --b:#d9671a; --c:#188f5f; --sel:#e6eefa;
+  --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e141a; --panel:#151d25; --ink:#e5ecf3; --muted:#93a4b5; --line:#26313c;
+    --a:#5aa2ff; --b:#ff9d4d; --c:#43c796; --sel:#1b2b3d; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e141a; --panel:#151d25; --ink:#e5ecf3; --muted:#93a4b5; --line:#26313c;
+  --a:#5aa2ff; --b:#ff9d4d; --c:#43c796; --sel:#1b2b3d; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+.app{display:grid;grid-template-columns:minmax(300px,430px) 1fr;height:100%}
+.list{overflow:auto;padding:18px 16px 40px;border-right:1px solid var(--line)}
+.list h1{font-size:19px;margin:0 0 2px;font-weight:600}
+.list .sub{color:var(--muted);margin:0 0 14px;font-size:13px}
+.list h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin:0 0 6px;cursor:pointer;font:inherit}
+.row .expr{font-family:var(--mono);font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.row .tag{flex:none;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:var(--mono)}
+.row:hover{border-color:var(--a)}
+.row[aria-current="true"]{background:var(--sel);border-color:var(--a)}
+.row:focus-visible,.close:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.panel{overflow:auto;padding:18px 22px 40px}
+.close{display:none;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer;margin-bottom:10px}
+.psec{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.ptitle{font-family:var(--mono);font-size:19px;line-height:1.35;margin:4px 0 12px;overflow-wrap:anywhere;text-wrap:balance}
+.stage{position:relative;height:380px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hint{font-size:12px;color:var(--muted);margin:6px 2px 0;min-height:18px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 2px;font-family:var(--mono);font-size:12.5px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:16px;height:0;border-top:3px solid var(--a);display:inline-block}
+.ctls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 22px;margin:14px 0}
+.ctl label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-family:var(--mono)}
+.ctl output{color:var(--ink)}
+.ctl input{width:100%;accent-color:var(--a);margin:4px 0 0}
+.reads{display:grid;grid-template-columns:1fr auto;gap:2px 18px;max-width:520px;font-family:var(--mono);font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.reads div:nth-child(odd){color:var(--muted)}
+.reads div:nth-child(even){text-align:right;font-weight:500}
+.note{max-width:62ch;margin:14px 0 0;color:var(--ink)}
+.segwrap{display:flex;align-items:center;gap:10px;margin:0 0 4px;font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:5px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--sel);color:var(--ink);font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--a);outline-offset:-2px}
+.phead{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.phead .close{margin-bottom:0}
+.plain{font-family:var(--mono);font-size:12px;color:var(--muted);margin:-6px 0 12px;min-height:0;overflow-wrap:anywhere}
+.plain:empty{display:none}
+/* typeset math: built from a small TeX subset in the script */
+.m,.row .expr.m,.ptitle.m{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",serif;line-height:1.55;letter-spacing:.03em}
+.row .expr.m{font-size:17px}
+.ptitle.m{font-size:25px}
+.m i{font-style:italic}
+.m .fn{font-style:normal}
+.m .fn+i{margin-left:.15em}
+.m .op{margin:0 .34em}
+.m .sp{display:inline-block;width:1em}
+.m .th{display:inline-block;width:.2em}
+.m .frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .2em}
+.m .num{padding:0 .32em .1em;border-bottom:1.5px solid currentColor}
+.m .den{padding:.1em .32em 0}
+.m sup,.m sub{font-size:.72em;line-height:0;margin-left:.1em}
+.m i+sup,.m i+sub{margin-left:.14em}
+.m .pr{margin-left:.06em;margin-right:.04em}
+.m .pr+sup{margin-left:.06em}
+.m .po{margin-right:.08em}
+.m .pc{margin-left:.08em}
+.m .pc+sup,.m .pr+.pc{margin-left:.12em}
+.m .pb{margin:0 .06em}
+.m .fn{margin-right:.04em}
+.m .fn+.po{margin-left:.1em}
+.m i+.fn{margin-left:.18em}
+.m .sqrt{display:inline-flex;align-items:stretch;margin:0 .1em}
+.m .rs{display:inline-block;width:.9em;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M2 58 L16 52 L40 96 L98 2' fill='none' stroke='black' stroke-width='1.8' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center/100% 100%;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M2 58 L16 52 L40 96 L98 2' fill='none' stroke='black' stroke-width='1.8' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center/100% 100%}
+.m .rad{display:inline-block;border-top:1.5px solid currentColor;padding:.08em .2em 0 .1em}
+.m .tx{font-family:var(--body);font-size:.8em;white-space:pre}
+.m .lp{font-size:1.7em;line-height:.6;vertical-align:middle}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  .phead{display:flex}
+  .list{border-right:0}
+  .panel{position:fixed;inset:0;background:var(--bg);display:none;z-index:5;padding:14px 16px 40px}
+  .panel.open{display:block}
+  .close{display:inline-flex}
+  .stage{height:300px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="list" id="list" aria-label="Formulas">
+    <h1>Derivative Rule Explorer</h1>
+    <p class="sub">Pick a formula from your sheet. Its graph opens on the right.</p>
+    <div id="seg1"></div>
+  </nav>
+  <main class="panel" id="panel" aria-live="polite">
+    <div class="phead"><button class="close" id="close" type="button">Back to formulas</button><div id="seg2"></div></div>
+    <div class="psec" id="psec"></div>
+    <div class="ptitle" id="ptitle"></div>
+    <div class="plain" id="plain"></div>
+    <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+    <div class="hint" id="hint"></div>
+    <div class="legend" id="legend"></div>
+    <div class="ctls" id="ctls"></div>
+    <div class="reads" id="reads"></div>
+    <p class="note" id="note"></p>
+  </main>
+</div>
+
+<script>
+"use strict";
+const TAU = Math.PI * 2;
+const SEC = ["3.6 Chain rule and basics","3.7 Inverse trig","3.8 Implicit differentiation","3.9 Exponentials and logs","4.1 Related rates"];
+
+/* ---------- helpers ---------- */
+const fmt = (v, d = 3) => {
+  if (!isFinite(v)) return "undefined";
+  const a = Math.abs(v);
+  if (a !== 0 && (a >= 1e5 || a < 1e-3)) return v.toExponential(2);
+  return String(+v.toFixed(d));
+};
+const num = (f, x) => { const h = 1e-5; return (f(x + h) - f(x - h)) / (2 * h); };
+const nice = (span, n) => {
+  const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
+};
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const sec = x => 1 / Math.cos(x), csc = x => 1 / Math.sin(x), cot = x => 1 / Math.tan(x);
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const colors = () => ({ ink: cssv("--ink"), muted: cssv("--muted"), line: cssv("--line"), a: cssv("--a"), b: cssv("--b"), c: cssv("--c"), panel: cssv("--panel") });
+const MONO = '"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace';
+
+/* ---------- typeset math: small TeX subset -> HTML ---------- */
+const FN = new Set(["ln","log","sin","cos","tan","cot","sec","csc","arcsin","arccos","arctan","arccot","arcsec","arccsc"]);
+function tex(src) {
+  let i = 0;
+  function seq(stop) { let o = ""; while (i < src.length && src[i] !== stop) o += atom(); return o; }
+  function grp() { if (src[i] === "{") { i++; const s = seq("}"); i++; return s; } return base(); }
+  function raw() { i++; const j = src.indexOf("}", i), s = src.slice(i, j); i = j + 1; return s; }
+  function base() {
+    const c = src[i];
+    if (c === " ") { i++; return ""; }
+    if (c === "\\") {
+      let j = i + 1; while (j < src.length && /[a-zA-Z]/.test(src[j])) j++;
+      if (j === i + 1) j++;
+      const cmd = src.slice(i + 1, j); i = j;
+      if (cmd === "frac" || cmd === "dfrac") { const a = grp(), b = grp(); return `<span class="frac"><span class="num">${a}</span><span class="den">${b}</span></span>`; }
+      if (cmd === "sqrt") { const a = grp(); return `<span class="sqrt"><span class="rs">&#8203;</span><span class="rad">${a}</span></span>`; }
+      if (cmd === "text") return `<span class="tx">${raw()}</span>`;
+      if (cmd === "operatorname") return `<span class="fn">${raw()}</span>`;
+      if (cmd === "cdot") return '<span class="op">·</span>';
+      if (cmd === "to") return '<span class="op">→</span>';
+      if (cmd === "pi") return "π";
+      if (cmd === "quad") return '<span class="sp"></span>';
+      if (cmd === "," || cmd === ";" || cmd === " ") return '<span class="th"></span>';
+      if (cmd === "left" || cmd === "right") { const ch = src[i]; i++; return `<span class="lp">${ch}</span>`; }
+      if (FN.has(cmd)) return `<span class="fn">${cmd}</span>`;
+      return "";
+    }
+    if (c === "{") return "<span>" + grp() + "</span>";
+    i++;
+    if (/[a-zA-Z]/.test(c)) return `<i>${c}</i>`;
+    if (c === "=" || c === "+") return `<span class="op">${c}</span>`;
+    if (c === "-") return '<span class="op">−</span>';
+    if (c === "'") return '<span class="pr">′</span>';
+    if (c === "(" || c === "[") return `<span class="po">${c}</span>`;
+    if (c === ")" || c === "]") return `<span class="pc">${c}</span>`;
+    if (c === "|") return '<span class="pb">|</span>';
+    return c;
+  }
+  function atom() {
+    let o = base();
+    while (src[i] === "^" || src[i] === "_") { const t = src[i]; i++; const a = grp(); o += t === "^" ? `<sup>${a}</sup>` : `<sub>${a}</sub>`; }
+    return o;
+  }
+  return seq(null);
+}
+const TEX = {
+  chain: String.raw`[f(g(x))]' = f'(g(x)) \cdot g'(x)`,
+  power: String.raw`(u^n)' = n \cdot u^{n-1} \cdot u'`,
+  product: String.raw`(uv)' = u'v + uv'`,
+  quotient: String.raw`\left(\frac{u}{v}\right)' = \frac{u'v - uv'}{v^2}`,
+  sin: String.raw`(\sin u)' = \cos u \cdot u'`,
+  cos: String.raw`(\cos u)' = -\sin u \cdot u'`,
+  tan: String.raw`(\tan u)' = \sec^2 u \cdot u'`,
+  cot: String.raw`(\cot u)' = -\csc^2 u \cdot u'`,
+  sec: String.raw`(\sec u)' = \sec u \tan u \cdot u'`,
+  csc: String.raw`(\csc u)' = -\csc u \cot u \cdot u'`,
+  arcsin: String.raw`(\arcsin u)' = \frac{u'}{\sqrt{1-u^2}}`,
+  arccos: String.raw`(\arccos u)' = -\frac{u'}{\sqrt{1-u^2}}`,
+  arctan: String.raw`(\arctan u)' = \frac{u'}{1+u^2}`,
+  arccot: String.raw`(\operatorname{arccot} u)' = -\frac{u'}{1+u^2}`,
+  arcsec: String.raw`(\operatorname{arcsec} u)' = \frac{u'}{|u|\sqrt{u^2-1}}`,
+  arccsc: String.raw`(\operatorname{arccsc} u)' = -\frac{u'}{|u|\sqrt{u^2-1}}`,
+  implicit: String.raw`x^2 + y^2 = 25 \to y' = -\frac{x}{y}`,
+  second: String.raw`y'' = -\frac{25}{y^3}\quad\text{(second derivative)}`,
+  exp: String.raw`(e^u)' = e^u \cdot u'`,
+  aexp: String.raw`(a^u)' = a^u \cdot \ln a \cdot u'`,
+  ln: String.raw`(\ln u)' = \frac{u'}{u}`,
+  loga: String.raw`(\log_a u)' = \frac{u'}{u \cdot \ln a}`,
+  lnpow: String.raw`\ln(x^n) = n \cdot \ln x`,
+  lnprod: String.raw`\ln(xy) = \ln x + \ln y`,
+  inverse: String.raw`e^{\ln x} = x \quad\text{and}\quad \ln(e^x) = x`,
+  logdiff1: String.raw`\text{Log-diff: } y = x^x \to y' = x^x(\ln x + 1)`,
+  logdiff2: String.raw`\text{Log-diff: } y = x^5 e^{2x} \to y' = y\left(\frac{5}{x} + 2\right)`,
+  circle: String.raw`\text{Circle: } A = \pi r^2 \to \frac{dA}{dt} = 2\pi r \cdot \frac{dr}{dt}`,
+  sphere: String.raw`\text{Sphere: } V = \frac{4}{3}\pi r^3 \to \frac{dV}{dt} = 4\pi r^2 \cdot \frac{dr}{dt}`,
+  cone: String.raw`\text{Cone: } V = \frac{1}{3}\pi r^2 h \text{ with } r = \frac{h}{2}`,
+  cylinder: String.raw`\text{Cylinder: } V = \pi r^2 h`,
+  ladder: String.raw`\text{Right triangle: } x^2 + y^2 = d^2 \to x\,x' + y\,y' = 0`,
+  similar: String.raw`\text{Similar triangles: } \frac{r}{h} = \frac{6}{12}`
+};
+let mode = "sym";
+try { const m = localStorage.getItem("notation"); if (m === "sym" || m === "text") mode = m; } catch (e) {}
+
+/* ---------- 2D plotting ---------- */
+function plot2d(g, o) {
+  const { ctx, w, h, C } = g;
+  const pl = 38, pr = 12, pt = 12, pb = 26, W = w - pl - pr, H = h - pt - pb;
+  let ux = W / (o.xr[1] - o.xr[0]), uy = H / (o.yr[1] - o.yr[0]);
+  if (o.eq) { const u = Math.min(ux, uy); ux = u; uy = u; }
+  const mx = (o.xr[0] + o.xr[1]) / 2, my = (o.yr[0] + o.yr[1]) / 2, cx = pl + W / 2, cy = pt + H / 2;
+  const X = x => cx + (x - mx) * ux, Y = y => cy - (y - my) * uy;
+  const vx0 = mx - W / 2 / ux, vx1 = mx + W / 2 / ux, vy0 = my - H / 2 / uy, vy1 = my + H / 2 / uy;
+  const sx = nice(vx1 - vx0, 8), sy = nice(vy1 - vy0, 6);
+
+  ctx.save(); ctx.beginPath(); ctx.rect(pl, pt, W, H); ctx.clip();
+  ctx.lineWidth = 1; ctx.strokeStyle = C.line; ctx.beginPath();
+  for (let i = Math.ceil(vx0 / sx); i * sx <= vx1; i++) { ctx.moveTo(X(i * sx), pt); ctx.lineTo(X(i * sx), pt + H); }
+  for (let i = Math.ceil(vy0 / sy); i * sy <= vy1; i++) { ctx.moveTo(pl, Y(i * sy)); ctx.lineTo(pl + W, Y(i * sy)); }
+  ctx.stroke();
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.4; ctx.beginPath();
+  if (vy0 < 0 && vy1 > 0) { ctx.moveTo(pl, Y(0)); ctx.lineTo(pl + W, Y(0)); }
+  if (vx0 < 0 && vx1 > 0) { ctx.moveTo(X(0), pt); ctx.lineTo(X(0), pt + H); }
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = C.muted; ctx.font = "11px " + MONO;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let i = Math.ceil(vx0 / sx); i * sx <= vx1; i++) ctx.fillText(String(+(i * sx).toPrecision(3)), X(i * sx), pt + H + 6);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = Math.ceil(vy0 / sy); i * sy <= vy1; i++) ctx.fillText(String(+(i * sy).toPrecision(3)), pl - 6, Y(i * sy));
+
+  ctx.save(); ctx.beginPath(); ctx.rect(pl, pt, W, H); ctx.clip();
+  const N = Math.ceil(W * 1.5);
+  (o.curves || []).forEach(c => {
+    ctx.beginPath(); ctx.strokeStyle = C[c.col]; ctx.lineWidth = c.lw || 2; ctx.setLineDash(c.dash ? [6, 5] : []);
+    let prev = null;
+    for (let i = 0; i <= N; i++) {
+      const x = vx0 + (vx1 - vx0) * i / N, y = c.f(x);
+      if (!isFinite(y) || Math.abs(y) > 1e6) { prev = null; continue; }
+      if (prev === null) ctx.moveTo(X(x), Y(y));
+      else if (Math.abs(y - prev) > (vy1 - vy0) * 0.8) ctx.moveTo(X(x), Y(y));
+      else ctx.lineTo(X(x), Y(y));
+      prev = y;
+    }
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  const t = o.tan;
+  if (t && isFinite(t.y) && isFinite(t.m) && Math.abs(t.m) < 1e4) {
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1.2; ctx.setLineDash([2, 4]); ctx.beginPath();
+    ctx.moveTo(X(t.x), pt); ctx.lineTo(X(t.x), pt + H); ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.setLineDash([5, 4]); ctx.beginPath();
+    ctx.moveTo(X(vx0), Y(t.y + t.m * (vx0 - t.x))); ctx.lineTo(X(vx1), Y(t.y + t.m * (vx1 - t.x))); ctx.stroke();
+    ctx.setLineDash([]);
+    dot(ctx, X(t.x), Y(t.y), 5.5, C.a, C.panel);
+    if (t.mark !== false) dot(ctx, X(t.x), Y(t.m), 5.5, C.b, C.panel);
+  }
+  ctx.restore();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.strokeRect(pl, pt, W, H);
+  plotMap = { X, Y, ux, uy, pl, pt, W, H, inv: px => mx + (px - cx) / ux, invY: py => my - (py - cy) / uy };
+  return plotMap;
+}
+function dot(ctx, x, y, r, fill, ring) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = ring; ctx.stroke();
+}
+function label(g, txt, x, y, col, align) {
+  g.ctx.font = "12px " + MONO; g.ctx.fillStyle = g.C[col || "ink"]; g.ctx.textAlign = align || "left"; g.ctx.textBaseline = "middle";
+  g.ctx.fillText(txt, x, y);
+}
+
+/* ---------- 3D wireframe ---------- */
+function render3d(g, view, polys, o) {
+  const { ctx, w, h, C } = g;
+  const s = Math.min(w, h) / o.units, d = 70;
+  const cyw = Math.cos(view.yaw), syw = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  const P = q => {
+    const x = q[0], y = q[1] - o.cy, z = q[2];
+    const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw;
+    const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp, f = d / (d + z2);
+    return [w / 2 + x1 * f * s, h / 2 - y2 * f * s];
+  };
+  polys.forEach(p => {
+    ctx.beginPath();
+    p.pts.forEach((q, i) => { const a = P(q); if (i) ctx.lineTo(a[0], a[1]); else ctx.moveTo(a[0], a[1]); });
+    if (p.close) ctx.closePath();
+    if (p.fill) { ctx.globalAlpha = p.alpha || 0.3; ctx.fillStyle = C[p.col]; ctx.fill(); ctx.globalAlpha = 1; }
+    if (p.stroke !== false) {
+      ctx.strokeStyle = C[p.col]; ctx.lineWidth = p.lw || 1.2; ctx.globalAlpha = p.sa == null ? 1 : p.sa;
+      ctx.setLineDash(p.dash ? [5, 4] : []); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+  });
+}
+const ring = (r, y, n = 64) => { const a = []; for (let i = 0; i < n; i++) a.push([r * Math.cos(TAU * i / n), y, r * Math.sin(TAU * i / n)]); return a; };
+function sphereLines(r, col, sa, dash) {
+  const out = [];
+  [-60, -30, 0, 30, 60].forEach(la => { const t = la * Math.PI / 180; out.push({ pts: ring(r * Math.cos(t), r * Math.sin(t)), close: true, col, sa, lw: 1, dash }); });
+  for (let k = 0; k < 12; k++) {
+    const ph = TAU * k / 12, pts = [];
+    for (let j = 0; j <= 30; j++) { const th = Math.PI * j / 30; pts.push([r * Math.sin(th) * Math.cos(ph), r * Math.cos(th), r * Math.sin(th) * Math.sin(ph)]); }
+    out.push({ pts, col, sa, lw: 1, dash });
+  }
+  return out;
+}
+
+/* ---------- item factories ---------- */
+const items = [];
+function fnItem(cfg) {
+  const params = cfg.params || [];
+  const it = {
+    id: cfg.id, sec: cfg.sec, expr: cfg.expr, tag: "2D", note: cfg.note, hint: "Slide x or drag on the graph to move the tangent.",
+    hoverCurves: p => it.curves(p),
+    ctrls: [...params, { k: "x", label: "x", min: cfg.xr[0], max: cfg.xr[1], step: 0.01, v: cfg.x0 }],
+    dom: cfg.dom,
+    curves(p) {
+      const B = cfg.build(p);
+      return [{ f: B.f, col: "a", label: B.fl, lw: 2.4 }, { f: B.df, col: "b", label: B.dl, lw: 2 }, ...(B.extra || [])];
+    },
+    draw(g, p) {
+      const B = cfg.build(p), x = p.x;
+      plot2d(g, { xr: cfg.xr, yr: cfg.yr, eq: cfg.eq, curves: it.curves(p), tan: { x, y: B.f(x), m: B.df(x) } });
+    },
+    legend(p) { return it.curves(p).map(c => [c.col, c.label]); },
+    read(p) {
+      const B = cfg.build(p), x = p.x, y = B.f(x), m = B.df(x);
+      const rows = [["x", fmt(x), "ink"], ["height  y", fmt(y), "a"], ["slope from the formula", fmt(m), "b"], ["slope measured on the curve", fmt(num(B.f, x)), "muted"]];
+      if (B.more) rows.push(...B.more(x, p));
+      return rows;
+    }
+  };
+  return it;
+}
+const trig = (id, name, F, DF, expr, note, yr) => fnItem({
+  id, sec: 0, expr, note, xr: [-2 * Math.PI, 2 * Math.PI], yr, x0: 0.6,
+  params: [{ k: "k", label: "k  (u = kx)", min: 0.5, max: 3, step: 0.5, v: 1 }],
+  build: p => ({ f: x => F(p.k * x), df: x => p.k * DF(p.k * x), fl: `y = ${name}(${p.k}x)`, dl: "y′ = formula" }),
+  more: (x, p) => [["inner slope u′", fmt(p.k), "muted"]]
+});
+const inv = (id, name, F, DF, expr, note, domf, xr, yr) => fnItem({
+  id, sec: 1, expr, note, xr, yr, dom: domf, x0: null,
+  params: [{ k: "k", label: "k  (u = kx)", min: 0.5, max: 2, step: 0.5, v: 1 }],
+  build: p => ({ f: x => F(p.k * x), df: x => DF(p.k * x, p.k), fl: `y = ${name}(${p.k}x)`, dl: "y′ = formula" }),
+  more: (x, p) => [["inner slope u′", fmt(p.k), "muted"]]
+});
+
+/* ---- 3.6 ---- */
+items.push(fnItem({ id: "chain", sec: 0, expr: "[f(g(x))]′ = f′(g(x)) · g′(x)", xr: [-3, 3], yr: [-6, 6], x0: 1,
+  note: "Blue is y = sin(x²), orange is its derivative. The slope is two factors multiplied: the outer slope cos(x²) and the inner slope 2x.",
+  build: p => ({ f: x => Math.sin(x * x), df: x => Math.cos(x * x) * 2 * x, fl: "y = sin(x²)", dl: "y′ = cos(x²) · 2x" }),
+  more: x => [["outer  f′(g) = cos(x²)", fmt(Math.cos(x * x)), "c"], ["inner  g′ = 2x", fmt(2 * x), "c"], ["product", fmt(Math.cos(x * x) * 2 * x), "b"]] }));
+items.push(fnItem({ id: "power", sec: 0, expr: "(uⁿ)′ = n · uⁿ⁻¹ · u′", xr: [-1.5, 1.5], yr: [-12, 36], x0: 0.8,
+  params: [{ k: "n", label: "n", min: 1, max: 3, step: 1, v: 3 }],
+  note: "Blue is y = (x² + 1)ⁿ. The exponent n comes down, the power drops by one, and the inner slope 2x multiplies in at the end.",
+  build: p => ({ f: x => Math.pow(x * x + 1, p.n), df: x => p.n * Math.pow(x * x + 1, p.n - 1) * 2 * x, fl: `y = (x²+1)^${p.n}`, dl: "y′ = n(x²+1)ⁿ⁻¹ · 2x" }),
+  more: (x, p) => [["n · uⁿ⁻¹", fmt(p.n * Math.pow(x * x + 1, p.n - 1)), "c"], ["u′ = 2x", fmt(2 * x), "c"]] }));
+items.push(fnItem({ id: "product", sec: 0, expr: "(uv)′ = u′v + uv′", xr: [-6.5, 6.5], yr: [-9, 9], x0: 2,
+  note: "Blue is y = x · sin x, with u = x and v = sin x. The slope adds two pieces: u changing while v holds still, then v changing while u holds still.",
+  build: p => ({ f: x => x * Math.sin(x), df: x => Math.sin(x) + x * Math.cos(x), fl: "y = x sin x", dl: "y′ = sin x + x cos x" }),
+  more: x => [["u′v = sin x", fmt(Math.sin(x)), "c"], ["uv′ = x cos x", fmt(x * Math.cos(x)), "c"]] }));
+items.push(fnItem({ id: "quotient", sec: 0, expr: "(u/v)′ = (u′v − uv′) / v²", xr: [-5, 5], yr: [-1.2, 1.2], x0: 0.5,
+  note: "Blue is y = x / (x² + 1). The slope is the top-slope term minus the bottom-slope term, over the bottom squared. It is steepest at x = 0 and flips sign at x = ±1.",
+  build: p => ({ f: x => x / (x * x + 1), df: x => (1 * (x * x + 1) - x * 2 * x) / Math.pow(x * x + 1, 2), fl: "y = x/(x²+1)", dl: "y′ = (1−x²)/(x²+1)²" }),
+  more: x => [["u′v − uv′", fmt((x * x + 1) - 2 * x * x), "c"], ["v²", fmt(Math.pow(x * x + 1, 2)), "c"]] }));
+items.push(trig("sin", "sin", Math.sin, Math.cos, "(sin u)′ = cos u · u′", "Blue is sin(kx). The slope is k·cos(kx). Raise k and the wave compresses, which steepens it by exactly the factor k.", [-4, 4]));
+items.push(trig("cos", "cos", Math.cos, x => -Math.sin(x), "(cos u)′ = −sin u · u′", "Blue is cos(kx). Where the blue curve peaks the slope is zero, and the slope is most negative where the curve falls fastest.", [-4, 4]));
+items.push(trig("tan", "tan", Math.tan, x => Math.pow(sec(x), 2), "(tan u)′ = sec² u · u′", "tan climbs between asymptotes. The slope sec²(kx) is never below k, and it blows up near each asymptote.", [-6, 6]));
+items.push(trig("cot", "cot", cot, x => -Math.pow(csc(x), 2), "(cot u)′ = −csc² u · u′", "cot falls between asymptotes, so its slope is always negative.", [-6, 6]));
+items.push(trig("sec", "sec", sec, x => sec(x) * Math.tan(x), "(sec u)′ = sec u tan u · u′", "sec is 1 divided by cos. Its slope is zero at the turning points and huge near the asymptotes.", [-6, 6]));
+items.push(trig("csc", "csc", csc, x => -csc(x) * cot(x), "(csc u)′ = −csc u cot u · u′", "csc is 1 divided by sin. The slope is zero at its turning points.", [-6, 6]));
+
+/* ---- 3.7 ---- */
+const clampDom = a => p => [-a / p.k, a / p.k];
+items.push(inv("arcsin", "arcsin", Math.asin, (u, k) => k / Math.sqrt(1 - u * u), "(arcsin u)′ = u′ / √(1 − u²)",
+  "Defined only while |kx| ≤ 1. The slope starts at k at x = 0 and blows up as the curve reaches its two ends.", p => [-0.97 / p.k, 0.97 / p.k], [-2.5, 2.5], [-3, 3]));
+items.push(inv("arccos", "arccos", Math.acos, (u, k) => -k / Math.sqrt(1 - u * u), "(arccos u)′ = −u′ / √(1 − u²)",
+  "arccos is a flipped arcsin, so its slope is the same magnitude with a minus sign.", p => [-0.97 / p.k, 0.97 / p.k], [-2.5, 2.5], [-1, 4.5]));
+items.push(inv("arctan", "arctan", Math.atan, (u, k) => k / (1 + u * u), "(arctan u)′ = u′ / (1 + u²)",
+  "An S-curve that flattens out at ±π/2. Its slope is a single bell shape with its peak k at x = 0.", p => [-4, 4], [-4, 4], [-2.5, 2.5]));
+items.push(inv("arccot", "arccot", u => Math.PI / 2 - Math.atan(u), (u, k) => -k / (1 + u * u), "(arccot u)′ = −u′ / (1 + u²)",
+  "arccot is arctan flipped, so the slope is the same bell shape with a minus sign.", p => [-4, 4], [-4, 4], [-1, 4.5]));
+items.push(inv("arcsec", "arcsec", u => Math.acos(1 / u), (u, k) => k / (Math.abs(u) * Math.sqrt(u * u - 1)), "(arcsec u)′ = u′ / (|u| · √(u² − 1))",
+  "Defined for |kx| ≥ 1. The slider covers the right branch, where the slope is positive and falls off.", p => [1.05 / p.k, 4], [-4, 4], [-1, 4]));
+items.push(inv("arccsc", "arccsc", u => Math.asin(1 / u), (u, k) => -k / (Math.abs(u) * Math.sqrt(u * u - 1)), "(arccsc u)′ = −u′ / (|u| · √(u² − 1))",
+  "Defined for |kx| ≥ 1. On the right branch the curve falls, so the slope is negative, the opposite of arcsec.", p => [1.05 / p.k, 4], [-4, 4], [-2, 2.5]));
+
+/* ---- 3.8 ---- */
+items.push({
+  id: "implicit", sec: 2, expr: "x² + y² = 25 → y′ = −x/y", tag: "2D", hint: "Slide the angle to move the point around the circle.",
+  note: "The point rides the circle. Differentiating both sides gives 2x + 2y·y′ = 0, so the slope is −x/y: flat at the top, steeper toward the sides.",
+  ctrls: [{ k: "t", label: "angle (degrees)", min: 10, max: 170, step: 1, v: 53 }],
+  legend: () => [["a", "circle x² + y² = 25"], ["ink", "tangent, slope y′"]],
+  draw(g, p) {
+    const m = plot2d(g, { xr: [-7, 7], yr: [-5.5, 7.5], eq: true }), { ctx, C } = g;
+    ctx.save(); ctx.beginPath(); ctx.arc(m.X(0), m.Y(0), 5 * m.ux, 0, TAU); ctx.strokeStyle = C.a; ctx.globalAlpha = .35; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(m.X(0), m.Y(0), 5 * m.ux, -Math.PI, 0); ctx.lineWidth = 2.6; ctx.stroke(); ctx.restore();
+    const th = p.t * Math.PI / 180, x = 5 * Math.cos(th), y = 5 * Math.sin(th), sl = -x / y;
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 1.3; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(m.X(0), m.Y(0)); ctx.lineTo(m.X(x), m.Y(y)); ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.6; ctx.beginPath();
+    const dx = 3 / Math.sqrt(1 + sl * sl); ctx.moveTo(m.X(x - dx), m.Y(y - sl * dx)); ctx.lineTo(m.X(x + dx), m.Y(y + sl * dx)); ctx.stroke(); ctx.setLineDash([]);
+    dot(ctx, m.X(x), m.Y(y), 6, C.b, C.panel);
+  },
+  read(p) { const th = p.t * Math.PI / 180, x = 5 * Math.cos(th), y = 5 * Math.sin(th);
+    return [["point (x, y)", `(${fmt(x, 2)}, ${fmt(y, 2)})`, "ink"], ["y′ = −x/y", fmt(-x / y), "b"], ["y″ = −25/y³", fmt(-25 / (y * y * y)), "c"], ["bends", "downward", "muted"]]; }
+});
+items.push(fnItem({ id: "second", sec: 2, expr: "y″ = −25/y³  (second derivative)", xr: [-5.5, 5.5], yr: [-8, 8], x0: 3, dom: () => [-4.7, 4.7], mark: false,
+  note: "Blue is the upper half of the circle, orange is y′ = −x/y, green is y″ = −25/y³. The green curve is always negative, so the circle always bends downward.",
+  build: p => { const y = x => Math.sqrt(25 - x * x);
+    return { f: y, df: x => -x / y(x), fl: "y = √(25 − x²)", dl: "y′ = −x/y",
+      extra: [{ f: x => -25 / Math.pow(y(x), 3), col: "c", label: "y″ = −25/y³", lw: 2 }],
+      more: x => [["y″ = −25/y³", fmt(-25 / Math.pow(y(x), 3)), "c"]] }; } }));
+
+/* ---- 3.9 ---- */
+items.push(fnItem({ id: "exp", sec: 3, expr: "(e^u)′ = e^u · u′", xr: [-3, 3], yr: [-1, 9], x0: 1,
+  params: [{ k: "k", label: "k  (u = kx)", min: 0.5, max: 2, step: 0.5, v: 1 }],
+  note: "Blue is e^(kx). The slope divided by the height is k at every x. With k = 1 the slope equals the height, which is what makes e special.",
+  build: p => ({ f: x => Math.exp(p.k * x), df: x => p.k * Math.exp(p.k * x), fl: `y = e^(${p.k}x)`, dl: "y′ = k · e^(kx)" }),
+  more: (x, p) => [["slope ÷ height", fmt(p.k * Math.exp(p.k * x) / Math.exp(p.k * x)), "c"]] }));
+items.push(fnItem({ id: "aexp", sec: 3, expr: "(a^u)′ = a^u · ln a · u′", xr: [-3, 3], yr: [-1, 9], x0: 1,
+  params: [{ k: "a", label: "a", min: 1.2, max: 5, step: 0.01, v: 2 }],
+  note: "Blue is aˣ. The slope divided by the height is the same number at every x, and that number is ln a. Set a near 2.718 and the ratio is 1.",
+  build: p => ({ f: x => Math.pow(p.a, x), df: x => Math.pow(p.a, x) * Math.log(p.a), fl: `y = ${p.a}^x`, dl: "y′ = aˣ · ln a" }),
+  more: (x, p) => [["slope ÷ height = ln a", fmt(Math.log(p.a)), "c"]] }));
+items.push(fnItem({ id: "ln", sec: 3, expr: "(ln u)′ = u′ / u", xr: [-0.5, 6], yr: [-4, 4], x0: 1.5, dom: () => [0.1, 6],
+  params: [{ k: "k", label: "k  (u = kx)", min: 0.5, max: 3, step: 0.5, v: 1 }],
+  note: "Blue is ln(kx). Its slope is u′/u = k/(kx) = 1/x, so k drops out: the curve only shifts. The slope blows up near 0 and shrinks as x grows.",
+  build: p => ({ f: x => Math.log(p.k * x), df: x => 1 / x, fl: `y = ln(${p.k}x)`, dl: "y′ = 1/x" }),
+  more: (x, p) => [["u′ / u = k / (kx)", fmt(p.k / (p.k * x)), "c"]] }));
+items.push(fnItem({ id: "loga", sec: 3, expr: "(log_a u)′ = u′ / (u · ln a)", xr: [-0.5, 10], yr: [-4, 4], x0: 2, dom: () => [0.1, 10],
+  params: [{ k: "a", label: "a", min: 2, max: 10, step: 0.5, v: 2 }],
+  note: "Blue is log base a of x. It is ln x divided by ln a, so the slope is 1/x divided by ln a. A larger base makes the curve flatter.",
+  build: p => ({ f: x => Math.log(x) / Math.log(p.a), df: x => 1 / (x * Math.log(p.a)), fl: `y = log_${p.a}(x)`, dl: "y′ = 1/(x ln a)" }),
+  more: (x, p) => [["ln a", fmt(Math.log(p.a)), "c"]] }));
+items.push(fnItem({ id: "lnpow", sec: 3, expr: "ln(xⁿ) = n · ln x", xr: [-0.5, 6], yr: [-6, 9], x0: 2, dom: () => [0.1, 6],
+  params: [{ k: "n", label: "n", min: 1, max: 5, step: 1, v: 3 }],
+  note: "Blue is ln(xⁿ) and the dashed green is n·ln x. They sit exactly on top of each other: the power comes down as a coefficient.",
+  build: p => ({ f: x => Math.log(Math.pow(x, p.n)), df: x => p.n / x, fl: `y = ln(x^${p.n})`, dl: "y′ = n/x",
+    extra: [{ f: x => p.n * Math.log(x), col: "c", label: `${p.n} · ln x`, dash: true, lw: 2 }] }),
+  more: (x, p) => [["n · ln x", fmt(p.n * Math.log(x)), "c"]] }));
+items.push(fnItem({ id: "lnprod", sec: 3, expr: "ln(xy) = ln x + ln y", xr: [-0.5, 6], yr: [-4, 5], x0: 2, dom: () => [0.1, 6],
+  params: [{ k: "c", label: "c", min: 0.2, max: 8, step: 0.1, v: 3 }],
+  note: "Blue is ln(c·x) and green is ln x. The gap between them is the same everywhere: ln c. Multiplying inside the log shifts the curve up by ln c.",
+  build: p => ({ f: x => Math.log(p.c * x), df: x => 1 / x, fl: `y = ln(${p.c}·x)`, dl: "y′ = 1/x",
+    extra: [{ f: x => Math.log(x), col: "c", label: "y = ln x", lw: 2 }] }),
+  more: (x, p) => [["ln(cx) − ln x = ln c", fmt(Math.log(p.c * x) - Math.log(x)), "c"]] }));
+items.push(fnItem({ id: "inverse", sec: 3, expr: "e^(ln x) = x  and  ln(eˣ) = x", xr: [-3, 5], yr: [-3, 5], eq: true, x0: 1, dom: () => [-2.5, 4.5],
+  note: "Blue is eˣ and green is ln x. They are mirror images across the dashed line y = x, which is why each undoes the other.",
+  build: p => ({ f: Math.exp, df: Math.exp, fl: "y = eˣ", dl: "y′ = eˣ",
+    extra: [{ f: Math.log, col: "c", label: "y = ln x", lw: 2.4 }, { f: x => x, col: "muted", label: "y = x", dash: true, lw: 1.5 }] }),
+  more: x => [["ln(eˣ)", fmt(Math.log(Math.exp(x))), "c"]] }));
+items.push(fnItem({ id: "logdiff1", sec: 3, expr: "Log-diff: y = x^x → y′ = x^x (ln x + 1)", xr: [0, 3], yr: [-1, 18], x0: 1.5, dom: () => [0.05, 3],
+  note: "Blue is x^x, orange is its slope. Taking ln first turns x^x into x·ln x, and the product rule gives ln x + 1. The slope is negative until x = 1/e ≈ 0.37.",
+  build: p => ({ f: x => Math.pow(x, x), df: x => Math.pow(x, x) * (Math.log(x) + 1), fl: "y = x^x", dl: "y′ = x^x (ln x + 1)" }),
+  more: x => [["ln x + 1", fmt(Math.log(x) + 1), "c"], ["y′ ÷ y", fmt(Math.log(x) + 1), "c"]] }));
+items.push(fnItem({ id: "logdiff2", sec: 3, expr: "Log-diff: y = x⁵e^(2x) → y′ = y (5/x + 2)", xr: [-3, 1.2], yr: [-6, 40], x0: 0.6, dom: () => [-3, 1.2],
+  note: "Blue is x⁵e^(2x). Taking ln first gives 5 ln x + 2x, so y′/y = 5/x + 2. Multiply by y at the end and the slope matches the product rule.",
+  build: p => ({ f: x => Math.pow(x, 5) * Math.exp(2 * x), df: x => Math.exp(2 * x) * (5 * Math.pow(x, 4) + 2 * Math.pow(x, 5)), fl: "y = x⁵e^(2x)", dl: "y′ = e^(2x)(5x⁴ + 2x⁵)" }),
+  more: x => [["y′ ÷ y", fmt(5 / x + 2), "c"], ["5/x + 2", fmt(5 / x + 2), "c"]] }));
+
+/* ---- 4.1 ---- */
+items.push({
+  id: "circle", sec: 4, expr: "Circle: A = πr²  →  dA/dt = 2πr · dr/dt", tag: "2D", hint: "Slide r. The orange ring is the area gained when r grows.",
+  note: "Growing the radius by a small Δr adds a thin ring of area about 2πr·Δr (circumference times thickness). That is why dA/dt = 2πr · dr/dt. A derivative drops one dimension.",
+  ctrls: [{ k: "r", label: "radius r", min: 0.5, max: 5, step: 0.1, v: 3 }, { k: "v", label: "dr/dt", min: 0.5, max: 3, step: 0.5, v: 1 }],
+  legend: () => [["a", "circle of radius r"], ["b", "ring added by Δr = 0.4"]],
+  draw(g, p) {
+    const m = plot2d(g, { xr: [-6.5, 6.5], yr: [-5.5, 5.5], eq: true }), { ctx, C } = g, d = 0.4;
+    ctx.beginPath(); ctx.arc(m.X(0), m.Y(0), (p.r + d) * m.ux, 0, TAU); ctx.arc(m.X(0), m.Y(0), p.r * m.ux, 0, TAU, true);
+    ctx.globalAlpha = .55; ctx.fillStyle = C.b; ctx.fill("evenodd"); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(m.X(0), m.Y(0), p.r * m.ux, 0, TAU); ctx.globalAlpha = .16; ctx.fillStyle = C.a; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.a; ctx.lineWidth = 2.4; ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(m.X(0), m.Y(0)); ctx.lineTo(m.X(p.r), m.Y(0)); ctx.stroke();
+    label(g, "r = " + fmt(p.r, 1), m.X(p.r / 2), m.Y(0) - 10, "ink", "center");
+  },
+  read(p) { const d = 0.4;
+    return [["area A = πr²", fmt(Math.PI * p.r * p.r), "a"], ["dA/dt = 2πr · dr/dt", fmt(2 * Math.PI * p.r * p.v), "b"], ["ring area (exact)", fmt(Math.PI * ((p.r + d) ** 2 - p.r ** 2)), "muted"], ["2πr · Δr", fmt(2 * Math.PI * p.r * d), "muted"]]; }
+});
+items.push({
+  id: "sphere", sec: 4, expr: "Sphere: V = (4/3)πr³  →  dV/dt = 4πr² · dr/dt", tag: "3D", hint: "Drag to rotate. Slide r.",
+  note: "A thin shell around the sphere has volume about surface area times thickness, S·Δr. So the volume's rate of change per unit of radius is the surface area 4πr², and dV/dt = 4πr² · dr/dt.",
+  ctrls: [{ k: "r", label: "radius r", min: 1, max: 5, step: 0.1, v: 3 }, { k: "v", label: "dr/dt", min: 0.5, max: 3, step: 0.5, v: 1 }],
+  legend: () => [["a", "sphere of radius r"], ["b", "shell added by Δr = 0.5"]],
+  draw(g, p, view) { render3d(g, view, [...sphereLines(p.r + 0.5, "b", 0.8, true), ...sphereLines(p.r, "a", 1, false)], { units: 14, cy: 0 }); },
+  read(p) { const d = 0.5;
+    return [["volume V", fmt(4 / 3 * Math.PI * p.r ** 3), "a"], ["surface S = 4πr²", fmt(4 * Math.PI * p.r ** 2), "c"], ["dV/dt = 4πr² · dr/dt", fmt(4 * Math.PI * p.r ** 2 * p.v), "b"], ["shell volume (exact)", fmt(4 / 3 * Math.PI * ((p.r + d) ** 3 - p.r ** 3)), "muted"], ["S · Δr", fmt(4 * Math.PI * p.r ** 2 * d), "muted"]]; }
+});
+items.push({
+  id: "cone", sec: 4, expr: "Cone: V = (1/3)πr²h  with  r = h/2", tag: "3D", hint: "Drag to rotate. Slide the water depth h.",
+  note: "Tip-down cone, 12 ft tall, top radius 6 ft, water poured in at 8π ft³/min. The surface widens as the water rises, so the same flow raises the level more slowly each minute. At h = 4 the rise is 2 ft/min.",
+  ctrls: [{ k: "h", label: "water depth h (ft)", min: 0.5, max: 12, step: 0.1, v: 4 }],
+  legend: () => [["muted", "cone, 12 ft tall"], ["b", "water"]],
+  draw(g, p, view) {
+    const polys = [];
+    for (let k = 0; k < 8; k++) { const t = TAU * k / 8; polys.push({ pts: [[0, 0, 0], [6 * Math.cos(t), 12, 6 * Math.sin(t)]], col: "muted", sa: .55, lw: 1 }); }
+    polys.push({ pts: ring(6, 12), close: true, col: "muted", sa: .7, lw: 1.3 });
+    polys.push({ pts: ring(p.h / 2, p.h), close: true, col: "b", fill: true, alpha: .35, lw: 2 });
+    for (let k = 0; k < 8; k++) { const t = TAU * k / 8; polys.push({ pts: [[0, 0, 0], [p.h / 2 * Math.cos(t), p.h, p.h / 2 * Math.sin(t)]], col: "b", lw: 1.4 }); }
+    render3d(g, view, polys, { units: 17, cy: 6 });
+  },
+  read(p) { const h = p.h;
+    return [["radius r = h/2", fmt(h / 2), "ink"], ["volume V = πh³/12", fmt(Math.PI * h ** 3 / 12), "a"], ["dV/dt (given)", "8π = 25.13", "muted"], ["dh/dt = 32 / h²", fmt(32 / (h * h)), "b"]]; }
+});
+items.push({
+  id: "cylinder", sec: 4, expr: "Cylinder: V = πr²h", tag: "3D", hint: "Drag to rotate. Slide the depth and the radius.",
+  note: "The cross-section never changes, so with the same flow of 8π ft³/min the level rises at a constant rate, 8/r² ft/min, whatever the depth. Compare the cone, where the rate changes.",
+  ctrls: [{ k: "h", label: "water depth h (ft)", min: 0.5, max: 12, step: 0.1, v: 5 }, { k: "r", label: "radius r (ft)", min: 2, max: 6, step: 0.5, v: 4 }],
+  legend: () => [["muted", "cylinder, 12 ft tall"], ["b", "water"]],
+  draw(g, p, view) {
+    const polys = [];
+    for (let k = 0; k < 8; k++) { const t = TAU * k / 8; polys.push({ pts: [[p.r * Math.cos(t), 0, p.r * Math.sin(t)], [p.r * Math.cos(t), 12, p.r * Math.sin(t)]], col: "muted", sa: .5, lw: 1 }); }
+    polys.push({ pts: ring(p.r, 0), close: true, col: "muted", sa: .7, lw: 1.3 }, { pts: ring(p.r, 12), close: true, col: "muted", sa: .7, lw: 1.3 });
+    polys.push({ pts: ring(p.r, p.h), close: true, col: "b", fill: true, alpha: .35, lw: 2 });
+    for (let k = 0; k < 8; k++) { const t = TAU * k / 8; polys.push({ pts: [[p.r * Math.cos(t), 0, p.r * Math.sin(t)], [p.r * Math.cos(t), p.h, p.r * Math.sin(t)]], col: "b", lw: 1.4 }); }
+    render3d(g, view, polys, { units: 19, cy: 6 });
+  },
+  read(p) { return [["volume V = πr²h", fmt(Math.PI * p.r * p.r * p.h), "a"], ["dV/dt (given)", "8π = 25.13", "muted"], ["dh/dt = 8 / r²", fmt(8 / (p.r * p.r)), "b"], ["changes with depth?", "no", "muted"]]; }
+});
+items.push({
+  id: "ladder", sec: 4, expr: "Right triangle: x² + y² = d²  →  x·x′ + y·y′ = 0", tag: "2D", hint: "Slide the foot of the ladder. The top rides the dotted circle.",
+  note: "A 13 ft ladder slides down a wall. Differentiating x² + y² = 169 gives x·x′ + y·y′ = 0, so y′ = −(x/y)·x′. That is the slope of the circle the top of the ladder travels along.",
+  ctrls: [{ k: "x", label: "foot distance x (ft)", min: 1, max: 12.5, step: 0.1, v: 5 }, { k: "v", label: "foot speed x′ (ft/s)", min: 1, max: 4, step: 0.5, v: 2 }],
+  legend: () => [["a", "ladder, length 13"], ["muted", "path of the top"]],
+  draw(g, p) {
+    const m = plot2d(g, { xr: [-1.5, 14.5], yr: [-1.5, 14.5], eq: true }), { ctx, C } = g, y = Math.sqrt(169 - p.x * p.x);
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 1.4; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(m.X(0), m.Y(0), 13 * m.ux, -Math.PI / 2, 0); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(m.X(0), m.Y(14.2)); ctx.lineTo(m.X(0), m.Y(0)); ctx.lineTo(m.X(14.2), m.Y(0)); ctx.stroke();
+    ctx.strokeStyle = C.a; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(m.X(p.x), m.Y(0)); ctx.lineTo(m.X(0), m.Y(y)); ctx.stroke();
+    dot(ctx, m.X(p.x), m.Y(0), 5.5, C.b, C.panel); dot(ctx, m.X(0), m.Y(y), 5.5, C.b, C.panel);
+    label(g, "x = " + fmt(p.x, 1), m.X(p.x / 2), m.Y(0) + 16, "ink", "center");
+    label(g, "y = " + fmt(y, 1), m.X(0) + 8, m.Y(y / 2), "ink", "left");
+  },
+  read(p) { const y = Math.sqrt(169 - p.x * p.x), dy = -(p.x / y) * p.v;
+    return [["height y = √(169 − x²)", fmt(y), "a"], ["y′ = −(x/y) · x′", fmt(dy), "b"], ["check  x·x′ + y·y′", fmt(p.x * p.v + y * dy), "muted"]]; }
+});
+items.push({
+  id: "similar", sec: 4, expr: "Similar triangles: r/h = 6/12", tag: "2D", hint: "Slide the depth. The water triangle keeps the cone's shape.",
+  note: "The water forms a smaller copy of the full cone's cross-section, so the ratio radius to depth is the same at every depth: r/h = 6/12, hence r = h/2. That swap removes r before you differentiate.",
+  ctrls: [{ k: "h", label: "water depth h (ft)", min: 0.5, max: 12, step: 0.1, v: 4 }],
+  legend: () => [["muted", "full cone, 6 by 12"], ["b", "water triangle"]],
+  draw(g, p) {
+    const m = plot2d(g, { xr: [-8, 8], yr: [-1.5, 13.5], eq: true }), { ctx, C } = g, h = p.h;
+    ctx.beginPath(); ctx.moveTo(m.X(0), m.Y(0)); ctx.lineTo(m.X(-h / 2), m.Y(h)); ctx.lineTo(m.X(h / 2), m.Y(h)); ctx.closePath();
+    ctx.globalAlpha = .4; ctx.fillStyle = C.b; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.b; ctx.lineWidth = 2.4; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(m.X(0), m.Y(0)); ctx.lineTo(m.X(-6), m.Y(12)); ctx.lineTo(m.X(6), m.Y(12)); ctx.closePath();
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 2; ctx.stroke();
+    label(g, "r = " + fmt(h / 2, 2), m.X(h / 4), m.Y(h) - 10, "ink", "center");
+    label(g, "h = " + fmt(h, 1), m.X(0) + 8, m.Y(h / 2), "ink", "left");
+    label(g, "6", m.X(3), m.Y(12) - 10, "muted", "center");
+    label(g, "12", m.X(-6) - 6, m.Y(6), "muted", "right");
+  },
+  read(p) { return [["r ÷ h (water)", fmt(p.h / 2 / p.h), "b"], ["6 ÷ 12 (full cone)", "0.5", "muted"], ["r = h/2", fmt(p.h / 2), "c"]]; }
+});
+
+items.forEach(it => { it.tex = TEX[it.id]; });
+
+/* ---------- app ---------- */
+const $ = id => document.getElementById(id);
+const cv = $("cv"), stage = $("stage"), ctx = cv.getContext("2d");
+let cur = null, P = {}, view = { yaw: 0.65, pitch: 0.35 };
+let plotMap = null, hover = null;
+
+function paintExpr(el, it) {
+  const s = mode === "sym" && it.tex;
+  el.className = "expr" + (s ? " m" : "");
+  if (s) el.innerHTML = tex(it.tex); else el.textContent = it.expr;
+}
+function paintTitle() {
+  const s = mode === "sym" && cur.tex, t = $("ptitle");
+  t.className = "ptitle" + (s ? " m" : "");
+  if (s) t.innerHTML = tex(cur.tex); else t.textContent = cur.expr;
+  $("plain").textContent = s ? "text:  " + cur.expr : "";
+}
+function setMode(m) {
+  mode = m; try { localStorage.setItem("notation", m); } catch (e) {}
+  document.querySelectorAll(".row").forEach(r => paintExpr(r.querySelector(".expr"), items.find(i => i.id === r.dataset.id)));
+  if (cur) paintTitle();
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === mode)));
+}
+function buildSeg(slot) {
+  slot.className = "segwrap";
+  slot.innerHTML = '<span>Equations as</span><div class="seg" role="group" aria-label="Notation"><button type="button" data-m="sym">Symbols</button><button type="button" data-m="text">Text</button></div>';
+  slot.querySelectorAll("button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.m)));
+}
+function buildList() {
+  const list = $("list");
+  SEC.forEach((s, si) => {
+    const h = document.createElement("h2"); h.textContent = s; list.appendChild(h);
+    items.filter(i => i.sec === si).forEach(it => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "row"; b.dataset.id = it.id;
+      b.innerHTML = `<span class="expr"></span><span class="tag">${it.tag}</span>`;
+      paintExpr(b.querySelector(".expr"), it);
+      b.addEventListener("click", () => { select(it.id); if (matchMedia("(max-width:820px)").matches) $("panel").classList.add("open"); });
+      list.appendChild(b);
+    });
+  });
+}
+function domOf(it) { return it.dom ? it.dom(P) : null; }
+function select(id) {
+  cur = items.find(i => i.id === id) || items[0];
+  document.querySelectorAll(".row").forEach(r => r.setAttribute("aria-current", String(r.dataset.id === cur.id)));
+  P = {}; cur.ctrls.forEach(c => { P[c.k] = c.v; });
+  const d = domOf(cur);
+  const xc = cur.ctrls.find(c => c.k === "x" && c.v === null);
+  if (xc) { P.x = d ? (d[0] + d[1]) / 2 : 1; }
+  if (d && P.x != null) P.x = clamp(P.x, d[0], d[1]);
+  $("psec").textContent = SEC[cur.sec]; paintTitle(); $("note").textContent = cur.note;
+  hover = null;
+  $("hint").textContent = cur.hint + (cur.tag === "3D" ? "" : cur.hoverCurves ? " Hover to read every curve's value." : " Hover to read coordinates.");
+  cv.style.touchAction = cur.tag === "3D" ? "none" : "pan-y"; cv.style.cursor = cur.tag === "3D" ? "grab" : "crosshair";
+  buildCtls(); try { history.replaceState(null, "", "#" + cur.id); } catch (e) { try { location.hash = cur.id; } catch (e2) {} }
+  render();
+}
+function buildCtls() {
+  const box = $("ctls"); box.innerHTML = "";
+  const d = domOf(cur);
+  cur.ctrls.forEach(c => {
+    const div = document.createElement("div"); div.className = "ctl";
+    const mn = (c.k === "x" && d) ? d[0] : c.min, mx = (c.k === "x" && d) ? d[1] : c.max;
+    div.innerHTML = `<label for="c_${c.k}">${c.label}<output id="o_${c.k}"></output></label><input type="range" id="c_${c.k}" min="${mn}" max="${mx}" step="${c.k === "x" ? (mx - mn) / 400 : c.step}" value="${P[c.k]}">`;
+    box.appendChild(div);
+    const inp = div.querySelector("input");
+    inp.addEventListener("input", () => { P[c.k] = parseFloat(inp.value); syncDom(); render(); });
+  });
+  syncOut();
+}
+function syncDom() {
+  const d = domOf(cur); if (!d) return;
+  const inp = $("c_x"); if (!inp) return;
+  inp.min = d[0]; inp.max = d[1]; inp.step = (d[1] - d[0]) / 400;
+  P.x = clamp(P.x, d[0], d[1]); inp.value = P.x;
+}
+function syncOut() { cur.ctrls.forEach(c => { const o = $("o_" + c.k); if (o) o.textContent = " " + fmt(P[c.k], 2); }); }
+
+function size() {
+  const r = stage.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { w: r.width, h: r.height };
+}
+function render() {
+  if (!cur) return;
+  const { w, h } = size(), C = colors(), g = { ctx, w, h, C };
+  ctx.clearRect(0, 0, w, h); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  plotMap = null;
+  cur.draw(g, P, view);
+  drawHover(g);
+  syncOut();
+  $("legend").innerHTML = (cur.legend(P) || []).map(l => `<span><i style="border-top-color:${C[l[0]]}"></i><span></span></span>`).join("");
+  [...$("legend").children].forEach((s, i) => { s.lastChild.textContent = cur.legend(P)[i][1]; });
+  const rows = cur.read(P);
+  $("reads").innerHTML = rows.map(() => "<div></div><div></div>").join("");
+  const cells = $("reads").children;
+  rows.forEach((r, i) => { cells[2 * i].textContent = r[0]; cells[2 * i + 1].textContent = r[1]; cells[2 * i + 1].style.color = C[r[2]] || C.ink; });
+}
+
+/* hover readout (2D) and drag-to-rotate (3D) */
+const shortLabel = l => l.indexOf("y′") === 0 ? "y′" : l.indexOf("y″") === 0 ? "y″" : l.replace(/^y = /, "");
+function drawHover(g) {
+  if (!hover || !plotMap || cur.tag === "3D") return;
+  const m = plotMap, { ctx, C } = g;
+  if (hover.x < m.pl || hover.x > m.pl + m.W || hover.y < m.pt || hover.y > m.pt + m.H) return;
+  const x = m.inv(hover.x), cs = cur.hoverCurves ? cur.hoverCurves(P) : null, rows = [];
+  ctx.save(); ctx.beginPath(); ctx.rect(m.pl, m.pt, m.W, m.H); ctx.clip();
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(hover.x, m.pt); ctx.lineTo(hover.x, m.pt + m.H); ctx.stroke(); ctx.setLineDash([]);
+  if (cs) {
+    rows.push([null, "x", fmt(x)]);
+    cs.forEach(c => {
+      const y = c.f(x);
+      if (isFinite(y)) { if (Math.abs(m.Y(y) - m.pt - m.H / 2) < m.H) dot(ctx, hover.x, m.Y(y), 4.5, C[c.col], C.panel); rows.push([c.col, shortLabel(c.label), fmt(y)]); }
+      else rows.push([c.col, shortLabel(c.label), "undefined"]);
+    });
+    const s = num(cs[0].f, x);
+    if (isFinite(s)) rows.push([null, "tangent slope", fmt(s)]);
+  } else {
+    rows.push([null, "x", fmt(x, 2)], [null, "y", fmt(m.invY(hover.y), 2)]);
+  }
+  ctx.restore();
+  ctx.font = "12px " + MONO;
+  const pad = 8, lh = 17, sw = 14;
+  const w1 = Math.max(...rows.map(r => ctx.measureText(r[1]).width)), w2 = Math.max(...rows.map(r => ctx.measureText(r[2]).width));
+  const bw = pad * 2 + sw + w1 + 14 + w2, bh = pad * 2 + rows.length * lh - 4;
+  let bx = hover.x + 16, by = hover.y + 12;
+  if (bx + bw > g.w - 4) bx = hover.x - 16 - bw;
+  if (by + bh > g.h - 4) by = g.h - 4 - bh;
+  ctx.fillStyle = C.panel; ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 7); else ctx.rect(bx, by, bw, bh); ctx.fill(); ctx.stroke();
+  ctx.textBaseline = "middle";
+  rows.forEach((r, i) => {
+    const yy = by + pad + i * lh + 6;
+    if (r[0]) { ctx.fillStyle = C[r[0]]; ctx.fillRect(bx + pad, yy - 2, sw - 4, 4); }
+    ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.fillText(r[1], bx + pad + sw, yy);
+    ctx.fillStyle = C.ink; ctx.textAlign = "right"; ctx.fillText(r[2], bx + bw - pad, yy);
+  });
+}
+function canvasXY(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function scrubTo() {
+  const inp = $("c_x");
+  if (!inp || !plotMap || !hover) return;
+  const x = clamp(plotMap.inv(hover.x), +inp.min, +inp.max);
+  P.x = x; inp.value = x;
+}
+let drag = null, scrub = false;
+cv.addEventListener("pointerdown", e => {
+  if (cur.tag === "3D") { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; return; }
+  scrub = true; cv.setPointerCapture(e.pointerId); hover = canvasXY(e); scrubTo(); render();
+});
+cv.addEventListener("pointermove", e => {
+  if (cur.tag === "3D") {
+    if (!drag) return;
+    view.yaw += (e.clientX - drag.x) * 0.01; view.pitch = clamp(view.pitch + (e.clientY - drag.y) * 0.01, -1.2, 1.2);
+    drag = { x: e.clientX, y: e.clientY }; render(); return;
+  }
+  hover = canvasXY(e); if (scrub) scrubTo(); render();
+});
+const endDrag = e => {
+  drag = null; scrub = false;
+  if (cur && cur.tag === "3D") cv.style.cursor = "grab";
+  else if (e && e.pointerType === "touch") { hover = null; render(); }
+};
+cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+cv.addEventListener("pointerleave", () => { if (cur.tag !== "3D" && !scrub) { hover = null; render(); } });
+$("close").addEventListener("click", () => $("panel").classList.remove("open"));
+new ResizeObserver(() => render()).observe(stage);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+buildList(); buildSeg($("seg1")); buildSeg($("seg2")); setMode(mode);
+const start = (location.hash || "").replace("#", "");
+select(items.some(i => i.id === start) ? start : "chain");
+</script>
+</body>
+</html>
